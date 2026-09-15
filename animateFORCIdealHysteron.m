@@ -15,6 +15,12 @@ function animateFORCIdealHysteron(outputFile,options)
 %   display has been traced does the fit run and the point/ridge
 %   appear, marked against the theoretical (Hc,Hu) this demo predicts.
 %
+%   The switching field Hsw is marked with a thick dashed line in both
+%   panels throughout: at H = +-Hsw on the left (where the particle
+%   actually switches), and at Hc = Hsw on the right (where that
+%   switch shows up in the distribution) -- so it is visually obvious
+%   that the two are the same number, not just similar-looking peaks.
+%
 %   OUTPUTFILE defaults to "forc_demo_ideal_hysteron_output.json" next
 %   to this script. The distribution itself is always computed from
 %   the FULL measured family in that file -- MaxCurves only controls
@@ -24,7 +30,9 @@ function animateFORCIdealHysteron(outputFile,options)
 %   Options:
 %       OutputFile      - video filename, written into plots/
 %                         (default "idealHysteronAnimation.mp4")
-%       FrameRate       - video frame rate (default 20)
+%       FrameRate       - video frame rate; lower plays back slower
+%                         without changing the animation itself
+%                         (default 15)
 %       MaxCurves       - number of reversal curves to animate, evenly
 %                         sampled like plotFORCFamily's MaxCurves
 %                         (default 12)
@@ -47,7 +55,7 @@ function animateFORCIdealHysteron(outputFile,options)
 arguments (Input)
     outputFile (1,1) string = ""
     options.OutputFile (1,1) string = "idealHysteronAnimation.mp4"
-    options.FrameRate (1,1) double {mustBePositive} = 20
+    options.FrameRate (1,1) double {mustBePositive} = 15
     options.MaxCurves (1,1) double {mustBePositive, mustBeInteger} = 12
     options.SmoothingFactor (1,1) double {mustBePositive, mustBeInteger} = 2
     options.DescentFrames (1,1) double {mustBePositive, mustBeInteger} = 8
@@ -64,6 +72,7 @@ FONTSIZE = 20;
 MAJOR_COLOR = [0.75 0.75 0.75];
 RECORDED_COLOR = [0.35 0.35 0.35];
 HIGHLIGHT_COLOR = [0.85 0.10 0.10];
+SWITCHING_COLOR = [0.90 0.60 0.00];
 CONTOUR_LEVELS = 24;
 
 raw = jsondecode(fileread(outputFile));
@@ -77,6 +86,14 @@ if isfield(raw,"theoretical")
     markerHcHu = [raw.theoretical.Hc, raw.theoretical.Hu];
 else
     markerHcHu = zeros(0,2);
+end
+
+if isfield(raw,"parameters") && isfield(raw.parameters,"Hsw")
+    Hsw = raw.parameters.Hsw;
+elseif ~isempty(markerHcHu)
+    Hsw = markerHcHu(1,1);
+else
+    Hsw = [];
 end
 
 % Computed once up front: MaxCurves only thins which curves are drawn,
@@ -113,9 +130,16 @@ xlabel(axLeft,"Applied field, H")
 ylabel(axLeft,"Magnetization, M")
 title(axLeft,"Field sweep and reversal curves","FontSize",0.8*FONTSIZE)
 plot(axLeft,Hmajor,Mmajor,"Color",MAJOR_COLOR,"LineWidth",2,"HandleVisibility","off")
+if ~isempty(Hsw)
+    xline(axLeft,Hsw,"LineStyle","--","Color",SWITCHING_COLOR,"LineWidth",3, ...
+        "DisplayName","H_{sw} (switching field)")
+    xline(axLeft,-Hsw,"LineStyle","--","Color",SWITCHING_COLOR,"LineWidth",3, ...
+        "HandleVisibility","off")
+    legend(axLeft,"Location","east","FontSize",0.6*FONTSIZE)
+end
 posMarker = plot(axLeft,NaN,NaN,"o","MarkerSize",10, ...
     "MarkerFaceColor",HIGHLIGHT_COLOR,"MarkerEdgeColor","k","HandleVisibility","off");
-traceLine = animatedline(axLeft,"Color",HIGHLIGHT_COLOR,"LineWidth",2.2);
+traceLine = animatedline(axLeft,"Color",HIGHLIGHT_COLOR,"LineWidth",2.2,"HandleVisibility","off");
 
 axRight = nexttile(tl);
 hold(axRight,"on"); grid(axRight,"on"); axis(axRight,"square")
@@ -125,6 +149,10 @@ xlabel(axRight,"Coercivity coordinate, H_c")
 ylabel(axRight,"Interaction coordinate, H_u")
 title(axRight,"FORC distribution (revealed once the family is complete)", ...
     "FontSize",0.7*FONTSIZE)
+if ~isempty(Hsw)
+    xline(axRight,Hsw,"LineStyle","--","Color",SWITCHING_COLOR,"LineWidth",3, ...
+        "DisplayName","H_c = H_{sw}")
+end
 caption = text(axRight,mean(xlim(axRight)),mean(ylim(axRight)), ...
     sprintf("curve 0 of %d",nCurves), ...
     "HorizontalAlignment","center","FontSize",FONTSIZE);
@@ -169,13 +197,17 @@ for k = 1:nCurves
 end
 
 delete(caption)
-contourf(axRight,d.Hc,d.Hu,d.rho,CONTOUR_LEVELS,"LineColor","none")
+contourf(axRight,d.Hc,d.Hu,d.rho,CONTOUR_LEVELS,"LineColor","none","HandleVisibility","off")
 colormap(axRight,divergingColormap)
 clim(axRight,[-peak,peak])
-yline(axRight,0,"LineStyle",":","Color","k","LineWidth",0.8)
+yline(axRight,0,"LineStyle",":","Color","k","LineWidth",0.8,"HandleVisibility","off")
 if ~isempty(markerHcHu)
     plot(axRight,markerHcHu(:,1),markerHcHu(:,2), ...
-        "Marker","x","MarkerSize",14,"LineWidth",2.5,"LineStyle","none","Color","k")
+        "Marker","x","MarkerSize",14,"LineWidth",2.5,"LineStyle","none","Color","k", ...
+        "DisplayName","Theoretical (H_{sw},0)")
+end
+if ~isempty(Hsw) || ~isempty(markerHcHu)
+    legend(axRight,"Location","northeast","FontSize",0.6*FONTSIZE)
 end
 cb = colorbar(axRight);
 cb.Label.String = "FORC distribution, \rho";
