@@ -77,6 +77,7 @@ saturation."
 | `simulateIdealHysteron.m` | A single **ideal rectangular** hysteron: switches instantaneously at `+Hsw` (up) and `-Hsw` (down), no smoothing | `runFORCDemoIdealHysteron.m` |
 | `simulateIdealHysteronPopulation.m` | Several independent ideal hysterons (wraps `simulateIdealHysteron.m` once per particle), averaged — no interaction between them yet | `runFORCDemoTwoHysterons.m` |
 | `simulateLangevin.m` | Reversible equilibrium Langevin particle, evaluated from the applied field | `runFORCDemoLangevin.m` |
+| `simulateInteractingHysterons.m` | Two ideal hysterons coupled by a dipolar interaction field (each one's effective field includes a term proportional to the other's current state) | `runFORCDemoInteractingHysterons.m` |
 
 To write a new solver, follow either file as a template: keep the
 signature, decide what `state` needs to remember, and let
@@ -154,6 +155,59 @@ animateFORCLangevin("forc_demo_langevin_output.json")
 ```
 
 The normalized Langevin relation is `M = Ms*(coth(Alpha*H) - 1/(Alpha*H))`, evaluated with a series expansion near zero to avoid cancellation. Because this model is equilibrium and history-independent, all reversal curves overlap and the FORC distribution should be zero up to floating-point and fitting effects. A finite-relaxation version would need additional state and is a separate model.
+
+### Demo 5 — two dipolar-coupled ideal hysterons
+
+```matlab
+runFORCDemoInteractingHysterons   % writes forc_demo_interacting_hysterons_output.json
+plotFORCFamily("forc_demo_interacting_hysterons_output.json", ...
+    "OutputPrefix","interactingHysterons_","SolverLabel","two dipolar-coupled ideal hysterons (J=0.1)")
+plotFORCDistribution("forc_demo_interacting_hysterons_output.json", ...
+    "OutputPrefix","interactingHysterons_","MarkerHcHu",[0.3 0; 0.6 0], ...
+    "MarkerLabel","Isolated particle (no coupling)")
+animateFORCIdealHysteron("forc_demo_interacting_hysterons_output.json", ...
+    "OutputFile","interactingHysteronsAnimation.mp4")
+```
+
+Same two particles as Demo 3 (`Hsw = [0.3, 0.6]`), but now each one's
+effective field includes a term proportional to the *other's* current
+state, `Heff_i = H + CouplingField*M_j` — the standard mean-field
+simplification of a dipolar interaction (see
+`simulateInteractingHysterons.m` for the sign convention: positive
+`CouplingField` is a "chain"/head-to-tail geometry that favours
+parallel alignment). With `CouplingField = 0.1`, this is what actually
+happened, checked by inspecting the raw family before trusting any
+prediction:
+
+- The major branch's two switches, isolated at `H = -0.3` and `-0.6`,
+  move to `H = -0.4` and `-0.5` — coupling pulls them toward each
+  other, exactly as hand-derived beforehand.
+- The ascending thresholds move the same way, `0.3 -> 0.4` and
+  `0.6 -> 0.5`. Below `CouplingField = (Hsw(2)-Hsw(1))/2 = 0.15` they
+  don't reach each other; at exactly that coupling the two would
+  coincide.
+- A **third** switching field shows up that neither particle has in
+  isolation: for reversal fields in the narrow window where only
+  particle 1 has switched down, it switches back up at `H = 0.2` —
+  lower than its own bare `Hsw = 0.3` — because particle 2 hasn't
+  flipped yet and so isn't there to help hold particle 1 down. The
+  same particle switches at a different field depending on its
+  neighbor's history. That's the actual signature of interaction FORC
+  analysis is used to detect in real samples, and it's not something
+  either single-particle demo could show.
+- The distribution is **not** two shifted points: it's a single
+  asymmetric ridge stretched toward negative `Hu` (the two isolated
+  points sit right at its edge, not its center), a smaller separate
+  positive lobe near `Hc = 0.2` from the third switching field above,
+  and a distinct **negative lobe** around `(Hc,Hu) = (0.3,-0.2)`. A
+  sign change is a different statement than a weaker positive value in
+  the same place (see "What FORC analysis is" above) — worth reading
+  as a real qualitative feature of the interaction, not smoothing
+  noise, since it survived at `SmoothingFactor = 2` and `3` alike.
+
+Compare directly against Demo 3's figures (same `Hsw`, `CouplingField
+= 0`) to see all of this is genuinely new, not a rendering artifact of
+this demo alone.
 
 ## Visualizing results
 
@@ -264,19 +318,27 @@ get a correct video, just as `.avi` instead.
 
 ## Roadmap
 
-This is a planned series of demos, each swapping in a richer
-`SolveFcn`:
+This is a series of demos, each swapping in a richer `SolveFcn`:
 
 1. **Single ideal hysteron** (done) — one particle, one point in FORC
    space.
 2. **Two independent ideal hysterons** (done) — two particles, two
    points, exactly additive; sets up the contrast for interactions.
-3. **Langevin-like (superparamagnetic) particle** — planned, not yet
-   implemented.
-4. **Interacting particles** — planned, not yet implemented; this is
-   the physics this repo was originally extracted from. With step 2's
-   exact-superposition result as a baseline, this is where the two
-   points should start to shift, merge, or smear into a ridge.
+3. **Langevin-like (superparamagnetic) particle** (done) — a
+   reversible, history-independent equilibrium model; its FORC
+   distribution is zero everywhere, the contrasting baseline to every
+   hysteretic demo here.
+4. **Interacting particles** (done) — two ideal hysterons coupled by a
+   dipolar interaction field. Confirmed the shift/merge predicted at
+   step 2, and turned up more: a third, history-dependent switching
+   field neither particle has alone, and a genuine negative lobe in
+   the distribution — see Demo 5 above.
+5. **Beyond two particles / real geometry** — planned, not yet
+   implemented: a population of several coupled hysterons, and/or
+   tracking real 3D positions so `CouplingField`'s sign and magnitude
+   follow from actual dipole geometry instead of being chosen by hand.
+   This is the physics this repo was originally extracted from
+   (`meteor-dipoles`).
 
 ## Provenance
 

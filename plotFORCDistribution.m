@@ -15,12 +15,18 @@ function plotFORCDistribution(outputFile,options)
 %   positive one, so zero has to be the colour the eye reads as neutral.
 %
 %   OUTPUTFILE defaults to "forc_demo_output.json" next to this script.
+%
+%   MarkerHcHu overlays marker(s) at given (Hc,Hu) points, labelled
+%   "Theoretical" by default; pass MarkerLabel to relabel them (e.g.
+%   "Isolated particle (no coupling)" when the points being shown are a
+%   comparison reference rather than an exact prediction).
 
 arguments (Input)
     outputFile (1,1) string = ""
     options.SmoothingFactor (1,1) double {mustBePositive, mustBeInteger} = 3
     options.OutputPrefix (1,1) string = ""
     options.MarkerHcHu (:,2) double = zeros(0,2)
+    options.MarkerLabel (1,1) string = "Theoretical"
 end
 
 if outputFile == ""
@@ -54,7 +60,7 @@ yline(ax,0,"LineStyle",":","Color","k","LineWidth",0.8,"HandleVisibility","off")
 if ~isempty(options.MarkerHcHu)
     plot(ax,options.MarkerHcHu(:,1),options.MarkerHcHu(:,2), ...
         "Marker","x","MarkerSize",14,"LineWidth",2.5,"LineStyle","none", ...
-        "Color","k","DisplayName","Theoretical")
+        "Color","k","DisplayName",options.MarkerLabel)
     legend(ax,"Location","northeast","FontSize",0.6*FONTSIZE)
 end
 
