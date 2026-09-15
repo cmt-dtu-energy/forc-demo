@@ -113,11 +113,13 @@ if ~isfolder(plotsDir)
 end
 videoPath = fullfile(plotsDir,options.OutputFile);
 gifPath = fullfile(plotsDir,options.OutputFile + ".gif");
+tempFramePath = string(tempname()) + ".png";
 
 v = VideoWriter(videoPath,"MPEG-4");
 v.FrameRate = options.FrameRate;
 open(v);
 closeVideo = onCleanup(@() close(v));
+cleanupTempFrame = onCleanup(@() deleteIfExists_(tempFramePath));
 
 f = figure;
 fontsize(f,FONTSIZE,"points")
@@ -174,6 +176,7 @@ caption = text(axRight,mean(xlim(axRight)),mean(ylim(axRight)), ...
     "HorizontalAlignment","center","FontSize",FONTSIZE);
 
 gifFrameIndex = 0;
+frameSize = [];
 
 for k = 1:nCurves
     row = rows(k);
@@ -192,7 +195,7 @@ for k = 1:nCurves
     for idx = descSel
         set(posMarker,"XData",descH(idx),"YData",descM(idx));
         addpoints(traceLine,descH(idx),descM(idx));
-        [v,gifFrameIndex] = emitFrame_(v,f,gifPath,gifFrameIndex,options.AlsoWriteGif);
+        [v,gifFrameIndex,frameSize] = emitFrame_(v,f,tempFramePath,gifPath,gifFrameIndex,frameSize,options.AlsoWriteGif);
     end
 
     ascCols = find(~isnan(M(row,:)));
@@ -202,14 +205,14 @@ for k = 1:nCurves
     for idx = ascSel
         set(posMarker,"XData",ascH(idx),"YData",ascM(idx));
         addpoints(traceLine,ascH(idx),ascM(idx));
-        [v,gifFrameIndex] = emitFrame_(v,f,gifPath,gifFrameIndex,options.AlsoWriteGif);
+        [v,gifFrameIndex,frameSize] = emitFrame_(v,f,tempFramePath,gifPath,gifFrameIndex,frameSize,options.AlsoWriteGif);
     end
 
     plot(axLeft,ascH,ascM,"Color",RECORDED_COLOR,"LineWidth",1.1,"HandleVisibility","off")
     clearpoints(traceLine)
 
     set(caption,"String",sprintf("curve %d of %d",k,nCurves))
-    [v,gifFrameIndex] = emitFrame_(v,f,gifPath,gifFrameIndex,options.AlsoWriteGif);
+    [v,gifFrameIndex,frameSize] = emitFrame_(v,f,tempFramePath,gifPath,gifFrameIndex,frameSize,options.AlsoWriteGif);
 end
 
 delete(caption)
@@ -231,7 +234,7 @@ title(axRight,sprintf("FORC distribution, SF = %d",options.SmoothingFactor), ...
     "FontSize",0.7*FONTSIZE)
 
 for i = 1:options.HoldFramesAtEnd
-    [v,gifFrameIndex] = emitFrame_(v,f,gifPath,gifFrameIndex,options.AlsoWriteGif);
+    [v,gifFrameIndex,frameSize] = emitFrame_(v,f,tempFramePath,gifPath,gifFrameIndex,frameSize,options.AlsoWriteGif);
 end
 
 hold(axLeft,"off")
@@ -254,13 +257,39 @@ idx = unique(round(linspace(1,n,min(maxFrames,n))));
 end
 
 
-function [v,frameIndex] = emitFrame_(v,f,gifPath,frameIndex,writeGif)
+function [v,frameIndex,frameSize] = emitFrame_(v,f,tempFramePath,gifPath,frameIndex,frameSize,writeGif)
 %EMITFRAME_ Capture the current figure into the video, and optionally the GIF.
+%
+%   Goes through EXPORTGRAPHICS to a temporary PNG, then reads it back,
+%   rather than GETFRAME or PRINT(...,'-RGBImage'): both of those read
+%   back a raster buffer from MATLAB's on-screen graphics pipeline,
+%   which was observed to be unreliable here -- corrupted, ghosted
+%   frames (stray diagonal lines, garbled text, colors flattened to
+%   grayscale) when the figure is invisible, as it always is under
+%   `matlab -batch` with no real display attached. exportgraphics is
+%   the code path savePlot.m already relies on for correct static PDF
+%   figures in this same environment, so routing the video through it
+%   too -- at the cost of a disk round-trip per frame -- sidesteps the
+%   broken raster pipeline entirely instead of working around it.
+%
+%   exportgraphics on a figure uses a content bounding box, not a fixed
+%   pixel size: adding the colorbar/legend partway through this
+%   animation grows that box even though f.Position never changes, and
+%   VideoWriter requires every frame to be exactly the same size as the
+%   first one it was given. FRAMESIZE is fixed from this function's
+%   first call and every later frame is resized to match, rather than
+%   fighting the layout engine to keep the raw export size constant.
 drawnow
-frame = getframe(f);
-writeVideo(v,frame);
+exportgraphics(f,tempFramePath,"Resolution",150)
+img = imread(tempFramePath);
+if isempty(frameSize)
+    frameSize = [size(img,1) size(img,2)];
+elseif ~isequal([size(img,1) size(img,2)],frameSize)
+    img = imresize(img,frameSize);
+end
+writeVideo(v,img);
 if writeGif
-    [indexed,map] = rgb2ind(frame.cdata,256);
+    [indexed,map] = rgb2ind(img,256);
     if frameIndex == 0
         imwrite(indexed,map,gifPath,"gif","LoopCount",Inf,"DelayTime",1/max(v.FrameRate,1));
     else
@@ -268,4 +297,12 @@ if writeGif
     end
 end
 frameIndex = frameIndex + 1;
+end
+
+
+function deleteIfExists_(path)
+%DELETEIFEXISTS_ Remove a file if it's there; used to clean up the temp frame.
+if isfile(path)
+    delete(path)
+end
 end

@@ -76,6 +76,7 @@ saturation."
 | `simulateHysteresisCurve.m` | A single hysteron smoothed by a `tanh` saturation curve, lagged by a coercivity `Hc` in the direction the field last moved | `runFORCDemo.m` |
 | `simulateIdealHysteron.m` | A single **ideal rectangular** hysteron: switches instantaneously at `+Hsw` (up) and `-Hsw` (down), no smoothing | `runFORCDemoIdealHysteron.m` |
 | `simulateIdealHysteronPopulation.m` | Several independent ideal hysterons (wraps `simulateIdealHysteron.m` once per particle), averaged — no interaction between them yet | `runFORCDemoTwoHysterons.m` |
+| `simulateLangevin.m` | Reversible equilibrium Langevin particle, evaluated from the applied field | `runFORCDemoLangevin.m` |
 
 To write a new solver, follow either file as a template: keep the
 signature, decide what `state` needs to remember, and let
@@ -140,6 +141,19 @@ separation, but there is no genuine cross-term. This is exactly what a
 later *interacting* version of this demo would change: the two points
 should start to shift, merge, or smear into a connecting ridge once
 the particles can influence each other's switching field.
+
+### Demo 4 — reversible Langevin particle
+
+```matlab
+runFORCDemoLangevin
+plotFORCFamily("forc_demo_langevin_output.json", ...
+    "OutputPrefix","langevin_","SolverLabel","equilibrium Langevin particle")
+plotFORCDistribution("forc_demo_langevin_output.json", ...
+    "OutputPrefix","langevin_")
+animateFORCLangevin("forc_demo_langevin_output.json")
+```
+
+The normalized Langevin relation is `M = Ms*(coth(Alpha*H) - 1/(Alpha*H))`, evaluated with a series expansion near zero to avoid cancellation. Because this model is equilibrium and history-independent, all reversal curves overlap and the FORC distribution should be zero up to floating-point and fitting effects. A finite-relaxation version would need additional state and is a separate model.
 
 ## Visualizing results
 
