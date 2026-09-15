@@ -22,6 +22,7 @@ function plotFORCSmoothingMaps(outputFile,options)
 arguments (Input)
     outputFile (1,1) string = ""
     options.SFValues (1,:) double {mustBePositive, mustBeInteger} = 1:5
+    options.OutputPrefix (1,1) string = ""
 end
 
 if outputFile == ""
@@ -41,7 +42,7 @@ M = raw.diagram.M;
 dH = abs(median(diff(H)));
 
 for sf = options.SFValues
-    d = forcDistribution_(Hr,H,M,sf);
+    d = forcDistribution(Hr,H,M,sf);
     peak = max(abs(d.rho),[],"all","omitnan");
 
     [f,ax] = createFigure(FONTSIZE);
@@ -63,42 +64,7 @@ for sf = options.SFValues
         sf,2*sf+1,2*sf+1,sf*dH,peak),"FontSize",0.7*FONTSIZE)
     hold(ax,"off")
 
-    savePlot(f,sprintf("figFORCSmoothingMapSF%d.pdf",sf))
+    savePlot(f,options.OutputPrefix + sprintf("figFORCSmoothingMapSF%d.pdf",sf))
 end
 
-end
-
-
-function d = forcDistribution_(Hr,H,M,smoothingFactor)
-%FORCDISTRIBUTION_ Pike's mixed second derivative of a FORC family.
-%   See FORCSimulation.distribution for the same fit; kept here as a
-%   small local copy so this plotting script has no non-plotting
-%   dependency.
-sf = smoothingFactor;
-nHr = numel(Hr);
-nH = numel(H);
-rho = NaN(nHr,nH);
-for i = (1+sf):(nHr-sf)
-    rowsIdx = (i-sf):(i+sf);
-    for j = (1+sf):(nH-sf)
-        colsIdx = (j-sf):(j+sf);
-        block = M(rowsIdx,colsIdx);
-        if any(isnan(block(:)))
-            continue
-        end
-        [V,U] = meshgrid(H(colsIdx) - H(j),Hr(rowsIdx) - Hr(i));
-        u = U(:); v = V(:);
-        su = max(abs(u)); sv = max(abs(v));
-        if su == 0 || sv == 0
-            continue
-        end
-        u = u/su; v = v/sv;
-        A = [ones(numel(u),1), u, u.^2, v, v.^2, u.*v];
-        coefficients = A\block(:);
-        rho(i,j) = -0.5*coefficients(6)/(su*sv);
-    end
-end
-[HH,HHr] = meshgrid(H,Hr);
-d = struct("Hr",Hr,"H",H,"rho",rho,"Hc",(HH-HHr)/2,"Hu",(HH+HHr)/2, ...
-    "SmoothingFactor",sf);
 end

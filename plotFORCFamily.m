@@ -14,6 +14,8 @@ function plotFORCFamily(outputFile,options)
 arguments (Input)
     outputFile (1,1) string = ""
     options.MaxCurves (1,1) double {mustBePositive, mustBeInteger} = 10
+    options.OutputPrefix (1,1) string = ""
+    options.SolverLabel (1,1) string = "placeholder solver"
 end
 
 if outputFile == ""
@@ -65,9 +67,9 @@ yline(ax,0,"LineStyle",":","Color","k","LineWidth",0.6, ...
 xlabel(ax,"Applied field, H")
 ylabel(ax,"Magnetization, M")
 legend(ax,p,"Location","northwest","FontSize",0.7*FONTSIZE);
-title(ax,"FORC family (placeholder solver)","FontSize",0.75*FONTSIZE)
+title(ax,sprintf("FORC family (%s)",options.SolverLabel),"FontSize",0.75*FONTSIZE)
 hold(ax,"off")
 
-savePlot(f,"figFORCFamily.pdf")
+savePlot(f,options.OutputPrefix + "figFORCFamily.pdf")
 
 end

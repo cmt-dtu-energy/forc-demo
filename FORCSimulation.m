@@ -34,7 +34,7 @@ classdef FORCSimulation < handle
     %       sim.run();
     %       dist = sim.distribution(3);   % struct with Hr, H, rho, Hc, Hu
     %
-    %   See also simulateHysteresisCurve.
+    %   See also simulateHysteresisCurve, forcDistribution.
 
     properties (SetAccess = private)
         Hmax (1,1) double
@@ -213,41 +213,7 @@ classdef FORCSimulation < handle
                       sf,window,nHr,nH);
             end
 
-            rho = NaN(nHr,nH);
-            for i = (1+sf):(nHr-sf)
-                rowsIdx = (i-sf):(i+sf);
-                for j = (1+sf):(nH-sf)
-                    colsIdx = (j-sf):(j+sf);
-
-                    block = obj.M(rowsIdx,colsIdx);
-                    if any(isnan(block(:)))
-                        % the window reaches outside the measured wedge
-                        continue
-                    end
-
-                    [V,U] = meshgrid(obj.H(colsIdx) - obj.H(j),obj.Hr(rowsIdx) - obj.Hr(i));
-                    u = U(:);
-                    v = V(:);
-
-                    su = max(abs(u));
-                    sv = max(abs(v));
-                    if su == 0 || sv == 0
-                        continue
-                    end
-                    u = u/su;
-                    v = v/sv;
-
-                    A = [ones(numel(u),1), u, u.^2, v, v.^2, u.*v];
-                    coefficients = A\block(:);
-
-                    rho(i,j) = -0.5*coefficients(6)/(su*sv);
-                end
-            end
-
-            [HH,HHr] = meshgrid(obj.H,obj.Hr);
-            d = struct("Hr",obj.Hr,"H",obj.H,"rho",rho, ...
-                "Hc",(HH - HHr)/2,"Hu",(HH + HHr)/2, ...
-                "SmoothingFactor",sf);
+            d = forcDistribution(obj.Hr,obj.H,obj.M,sf);
         end
     end
 

@@ -22,6 +22,7 @@ function plotFORCSmoothingInfluence(outputFile,options)
 arguments (Input)
     outputFile (1,1) string = ""
     options.SFValues (1,:) double {mustBePositive, mustBeInteger} = 1:5
+    options.OutputPrefix (1,1) string = ""
 end
 
 if outputFile == ""
@@ -44,7 +45,7 @@ dH = abs(median(diff(H)));
 sfValues = options.SFValues;
 rho = cell(1,numel(sfValues));
 for isf = 1:numel(sfValues)
-    rho{isf} = forcDistribution_(Hr,H,M,sfValues(isf));
+    rho{isf} = forcDistribution(Hr,H,M,sfValues(isf));
 end
 
 % The support shrinks as SF grows and the largest one is contained in
@@ -106,10 +107,10 @@ for ax = [axA,axB,axC,axD]
     hold(ax,"off")
 end
 
-savePlot(fA,"figFORCSmoothingInfluenceA.pdf")
-savePlot(fB,"figFORCSmoothingInfluenceB.pdf")
-savePlot(fC,"figFORCSmoothingInfluenceC.pdf")
-savePlot(fD,"figFORCSmoothingInfluenceD.pdf")
+savePlot(fA,options.OutputPrefix + "figFORCSmoothingInfluenceA.pdf")
+savePlot(fB,options.OutputPrefix + "figFORCSmoothingInfluenceB.pdf")
+savePlot(fC,options.OutputPrefix + "figFORCSmoothingInfluenceC.pdf")
+savePlot(fD,options.OutputPrefix + "figFORCSmoothingInfluenceD.pdf")
 
 end
 
@@ -152,39 +153,4 @@ p(2) = plot(ax,sfValues,fixedValue, ...
     "MarkerSize",markerSize,"MarkerFaceColor",fixedColor, ...
     "DisplayName",sprintf("Support of SF = %d",largestSF));
 legend(ax,p,"Location","best","FontSize",0.7*fontSize);
-end
-
-
-function d = forcDistribution_(Hr,H,M,smoothingFactor)
-%FORCDISTRIBUTION_ Pike's mixed second derivative of a FORC family.
-%   See FORCSimulation.distribution for the same fit; kept here as a
-%   small local copy so this plotting script has no non-plotting
-%   dependency.
-sf = smoothingFactor;
-nHr = numel(Hr);
-nH = numel(H);
-rho = NaN(nHr,nH);
-for i = (1+sf):(nHr-sf)
-    rowsIdx = (i-sf):(i+sf);
-    for j = (1+sf):(nH-sf)
-        colsIdx = (j-sf):(j+sf);
-        block = M(rowsIdx,colsIdx);
-        if any(isnan(block(:)))
-            continue
-        end
-        [V,U] = meshgrid(H(colsIdx) - H(j),Hr(rowsIdx) - Hr(i));
-        u = U(:); v = V(:);
-        su = max(abs(u)); sv = max(abs(v));
-        if su == 0 || sv == 0
-            continue
-        end
-        u = u/su; v = v/sv;
-        A = [ones(numel(u),1), u, u.^2, v, v.^2, u.*v];
-        coefficients = A\block(:);
-        rho(i,j) = -0.5*coefficients(6)/(su*sv);
-    end
-end
-[HH,HHr] = meshgrid(H,Hr);
-d = struct("Hr",Hr,"H",H,"rho",rho,"Hc",(HH-HHr)/2,"Hu",(HH+HHr)/2, ...
-    "SmoothingFactor",sf);
 end
