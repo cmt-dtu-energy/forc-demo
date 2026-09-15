@@ -1,8 +1,10 @@
 function animateFORCIdealHysteron(outputFile,options)
-%ANIMATEFORCIDEALHYSTERON Animate one particle's switch becoming one FORC point.
+%ANIMATEFORCIDEALHYSTERON Animate ideal hysteron switches becoming FORC points.
 %
 %   ANIMATEFORCIDEALHYSTERON(OUTPUTFILE) reads the JSON written by
-%   runFORCDemoIdealHysteron.m and renders a two-panel video:
+%   runFORCDemoIdealHysteron.m (one particle) or
+%   runFORCDemoTwoHysterons.m (several independent particles) and
+%   renders a two-panel video:
 %
 %       left  -- the applied field sweeping down the major branch, then
 %                 each reversal curve traced back up to saturation
@@ -49,8 +51,8 @@ function animateFORCIdealHysteron(outputFile,options)
 %                         for README/chat use rather than slides
 %                         (default false)
 %
-%   See also runFORCDemoIdealHysteron, plotFORCFamily, plotFORCDistribution,
-%   forcDistribution.
+%   See also runFORCDemoIdealHysteron, runFORCDemoTwoHysterons,
+%   plotFORCFamily, plotFORCDistribution, forcDistribution.
 
 arguments (Input)
     outputFile (1,1) string = ""
@@ -89,9 +91,9 @@ else
 end
 
 if isfield(raw,"parameters") && isfield(raw.parameters,"Hsw")
-    Hsw = raw.parameters.Hsw;
+    Hsw = raw.parameters.Hsw(:)';
 elseif ~isempty(markerHcHu)
-    Hsw = markerHcHu(1,1);
+    Hsw = markerHcHu(:,1)';
 else
     Hsw = [];
 end
@@ -131,10 +133,17 @@ ylabel(axLeft,"Magnetization, M")
 title(axLeft,"Field sweep and reversal curves","FontSize",0.8*FONTSIZE)
 plot(axLeft,Hmajor,Mmajor,"Color",MAJOR_COLOR,"LineWidth",2,"HandleVisibility","off")
 if ~isempty(Hsw)
-    xline(axLeft,Hsw,"LineStyle","--","Color",SWITCHING_COLOR,"LineWidth",3, ...
-        "DisplayName","H_{sw} (switching field)")
-    xline(axLeft,-Hsw,"LineStyle","--","Color",SWITCHING_COLOR,"LineWidth",3, ...
-        "HandleVisibility","off")
+    for i = 1:numel(Hsw)
+        if numel(Hsw) == 1
+            label = "H_{sw} (switching field)";
+        else
+            label = sprintf("H_{sw,%d} = %.2g",i,Hsw(i));
+        end
+        xline(axLeft,Hsw(i),"LineStyle","--","Color",SWITCHING_COLOR,"LineWidth",3, ...
+            "DisplayName",label)
+        xline(axLeft,-Hsw(i),"LineStyle","--","Color",SWITCHING_COLOR,"LineWidth",3, ...
+            "HandleVisibility","off")
+    end
     legend(axLeft,"Location","east","FontSize",0.6*FONTSIZE)
 end
 posMarker = plot(axLeft,NaN,NaN,"o","MarkerSize",10, ...
@@ -150,8 +159,15 @@ ylabel(axRight,"Interaction coordinate, H_u")
 title(axRight,"FORC distribution (revealed once the family is complete)", ...
     "FontSize",0.7*FONTSIZE)
 if ~isempty(Hsw)
-    xline(axRight,Hsw,"LineStyle","--","Color",SWITCHING_COLOR,"LineWidth",3, ...
-        "DisplayName","H_c = H_{sw}")
+    for i = 1:numel(Hsw)
+        if numel(Hsw) == 1
+            label = "H_c = H_{sw}";
+        else
+            label = sprintf("H_c = H_{sw,%d} = %.2g",i,Hsw(i));
+        end
+        xline(axRight,Hsw(i),"LineStyle","--","Color",SWITCHING_COLOR,"LineWidth",3, ...
+            "DisplayName",label)
+    end
 end
 caption = text(axRight,mean(xlim(axRight)),mean(ylim(axRight)), ...
     sprintf("curve 0 of %d",nCurves), ...
@@ -221,7 +237,8 @@ end
 hold(axLeft,"off")
 hold(axRight,"off")
 
-savePlot(f,"idealHysteron_figAnimationFinalFrame.pdf")
+[~,videoBaseName] = fileparts(options.OutputFile);
+savePlot(f,videoBaseName + "_finalFrame.pdf")
 
 fprintf("Wrote %s\n",videoPath);
 if options.AlsoWriteGif

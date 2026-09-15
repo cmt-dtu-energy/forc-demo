@@ -75,6 +75,7 @@ saturation."
 |---|---|---|
 | `simulateHysteresisCurve.m` | A single hysteron smoothed by a `tanh` saturation curve, lagged by a coercivity `Hc` in the direction the field last moved | `runFORCDemo.m` |
 | `simulateIdealHysteron.m` | A single **ideal rectangular** hysteron: switches instantaneously at `+Hsw` (up) and `-Hsw` (down), no smoothing | `runFORCDemoIdealHysteron.m` |
+| `simulateIdealHysteronPopulation.m` | Several independent ideal hysterons (wraps `simulateIdealHysteron.m` once per particle), averaged — no interaction between them yet | `runFORCDemoTwoHysterons.m` |
 
 To write a new solver, follow either file as a template: keep the
 signature, decide what `state` needs to remember, and let
@@ -110,6 +111,36 @@ cluster of cells rather than a single one, offset from the
 theoretical point by half a grid step. That's a genuine, worthwhile
 part of the demo, not an error to chase out.
 
+### Demo 3 — two independent ideal hysterons (two particles, two points)
+
+```matlab
+runFORCDemoTwoHysterons   % writes forc_demo_two_hysterons_output.json
+plotFORCFamily("forc_demo_two_hysterons_output.json", ...
+    "OutputPrefix","twoHysterons_","SolverLabel","two non-interacting ideal hysterons")
+plotFORCDistribution("forc_demo_two_hysterons_output.json", ...
+    "OutputPrefix","twoHysterons_","MarkerHcHu",[0.3 0; 0.6 0])
+```
+
+Two particles with different switching fields (`Hsw = [0.3, 0.6]`),
+measured together but not interacting: each one switches only on the
+applied field, never on the other's state. The family plot shows a
+three-level staircase (`-1`, `0`, `+1`) instead of the single
+hysteron's two levels, since the two particles' switches no longer
+coincide — but the distribution still shows two completely clean,
+separate points, one per particle, with nothing connecting them.
+
+That absence of coupling was checked rigorously, not just eyeballed:
+because Pike's fit is linear in `M`, and this population's `M` is the
+average of the two particles' individually-simulated `M`, the combined
+distribution is *exactly* `0.5*(rho1 + rho2)` at every grid point
+(verified to floating-point precision, `~1e-15`) — the two particles'
+own smearing tails (see "A numerical surprise" above) can reach a
+little way towards each other without ever really touching at this
+separation, but there is no genuine cross-term. This is exactly what a
+later *interacting* version of this demo would change: the two points
+should start to shift, merge, or smear into a connecting ridge once
+the particles can influence each other's switching field.
+
 ## Visualizing results
 
 Four plotting scripts, each reading a demo's JSON:
@@ -136,20 +167,31 @@ points.
 
 ## Animation
 
-`animateFORCIdealHysteron.m` renders a two-panel video from
-`forc_demo_ideal_hysteron_output.json`: the left panel traces the
-field sweeping down and each reversal curve being measured back up;
+`animateFORCIdealHysteron.m` renders a two-panel video from either
+ideal-hysteron demo's JSON (one particle or several): the left panel
+traces the field sweeping down and each reversal curve being measured
+back up, with thick dashed lines at each particle's `+-Hsw` throughout;
 the right panel stays blank until every displayed curve is done (Pike's
 fit needs the full measured neighborhood — there's no honest way to
-show it "part way"), then reveals the FORC distribution with the
-theoretical point marked.
+show it "part way"), then reveals the FORC distribution with a matching
+`Hc = Hsw` line and the theoretical point(s) marked per particle — so
+it's visually unambiguous that the switching field and the peak's
+coercivity are the same number, not just similarly placed.
 
 ```matlab
 animateFORCIdealHysteron   % writes plots/idealHysteronAnimation.mp4
+
+animateFORCIdealHysteron("forc_demo_two_hysterons_output.json", ...
+    "OutputFile","twoHysteronsAnimation.mp4")
 ```
 
+The frame rate (default 15) controls playback speed without changing
+the animation's content — lower it further to slow things down more.
 Pass `"AlsoWriteGif",true` for a GIF alongside the MP4 (better for
-README/chat embedding; the MP4 is the one meant for slides).
+README/chat embedding; the MP4 is the one meant for slides). The final
+frame is also saved as a static PDF, named after `OutputFile` (e.g.
+`twoHysteronsAnimation_finalFrame.pdf`) so multiple demos' animations
+don't overwrite each other's snapshot.
 
 ## Grid alignment — a gotcha that applies to any sharp-featured demo
 
@@ -196,15 +238,19 @@ MATLAB only — no toolboxes beyond base graphics, `VideoWriter`, and
 
 ## Roadmap
 
-This is the first of a planned series of demos, each swapping in a
-richer `SolveFcn`:
+This is a planned series of demos, each swapping in a richer
+`SolveFcn`:
 
-1. **Single ideal hysteron** (this repo, current) — one particle, one
-   point in FORC space.
-2. **Langevin-like (superparamagnetic) particle** — planned, not yet
+1. **Single ideal hysteron** (done) — one particle, one point in FORC
+   space.
+2. **Two independent ideal hysterons** (done) — two particles, two
+   points, exactly additive; sets up the contrast for interactions.
+3. **Langevin-like (superparamagnetic) particle** — planned, not yet
    implemented.
-3. **Interacting particles** — planned, not yet implemented; this is
-   the physics this repo was originally extracted from.
+4. **Interacting particles** — planned, not yet implemented; this is
+   the physics this repo was originally extracted from. With step 2's
+   exact-superposition result as a baseline, this is where the two
+   points should start to shift, merge, or smear into a ridge.
 
 ## Provenance
 
