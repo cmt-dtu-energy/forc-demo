@@ -1,50 +1,61 @@
 classdef testForcDistribution < matlab.unittest.TestCase
-    %TESTFORCDISTRIBUTION Unit tests for the shared FORC distribution fit.
-
     methods (Test)
         function bilinearSurfaceGivesKnownDerivative(testCase)
-            % For M(rev, meas) = rev * meas, d2M/(drev dmeas) = 1,
-            % so rho should be -0.5 at every interior grid point.
-
             smoothingWidth = 2;
             n = 17;
-            revFields = linspace(-1, 1, n);
-            measFields = linspace(-1, 1, n);
-            [measGrid, revGrid] = meshgrid(measFields, revFields);
-            fieldMatrix = revGrid .* measGrid;
-
-            d = forcDistribution(revFields, measFields, fieldMatrix, smoothingWidth);
-
-            testCase.verifySize(d.rho, size(fieldMatrix));
-            testCase.verifyEqual(d.('Hr'), revFields);
-            testCase.verifyEqual(d.('H'),  measFields);
-
+            x = linspace(-1, 1, n);
+            y = linspace(-1, 1, n);
+            [Y, X] = meshgrid(y, x);
+            Z = X .* Y;
+            d = forcDistribution(x, y, Z, smoothingWidth);
+            testCase.verifySize(d.rho, size(Z));
+            testCase.verifyEqual(d.('Hr'), x);
+            testCase.verifyEqual(d.('H'),  y);
             interior = ~isnan(d.rho);
-            testCase.verifyTrue(any(interior(:)));
-
             expected = repmat(-0.5, nnz(interior), 1);
             testCase.verifyEqual(d.rho(interior), expected, 'AbsTol', 1e-12);
         end
 
-        function smoothingWindowLeavesEdgesUndefined(testCase)
-            % Points within SF rows/columns of the border cannot fit a
-            % full (2*SF+1)^2 neighbourhood, so they must stay undefined.
-
+        function edgeWindowLeavesEdgesUndefined(testCase)
             smoothingWidth = 1;
             n = 9;
-            revFields = linspace(-1, 1, n);
-            measFields = linspace(-1, 1, n);
-            [measGrid, revGrid] = meshgrid(measFields, revFields);
-            fieldMatrix = revGrid .* measGrid;
-
-            d = forcDistribution(revFields, measFields, fieldMatrix, smoothingWidth);
-
+            x = linspace(-1, 1, n);
+            y = linspace(-1, 1, n);
+            [Y, X] = meshgrid(y, x);
+            Z = X .* Y;
+            d = forcDistribution(x, y, Z, smoothingWidth);
             expectedUndefined = false(n, n);
             expectedUndefined([1:smoothingWidth, n-smoothingWidth+1:n], :) = true;
             expectedUndefined(:, [1:smoothingWidth, n-smoothingWidth+1:n]) = true;
-
             testCase.verifyTrue(all(isnan(d.rho(expectedUndefined))));
             testCase.verifyTrue(all(~isnan(d.rho(~expectedUndefined))));
+        end
+
+        function quadraticInFirstCoordinateHasZeroMixedDerivative(testCase)
+            smoothingWidth = 2;
+            n = 17;
+            x = linspace(-1, 1, n);
+            y = linspace(-1, 1, n);
+            [~, X] = meshgrid(y, x);
+            Z = X.^2;
+            d = forcDistribution(x, y, Z, smoothingWidth);
+            interior = ~isnan(d.rho);
+            expected = zeros(nnz(interior), 1);
+            testCase.verifyEqual(d.rho(interior), expected, 'AbsTol', 1e-12);
+        end
+
+        function nonUniformGridRecoversKnownDerivative(testCase)
+            smoothingWidth = 2;
+            nXDir = 21;
+            nYDir = 19;
+            x = linspace(-1, 1, nXDir).^3;
+            y = logspace(-2, 0, nYDir);
+            [Y, X] = meshgrid(y, x);
+            Z = X .* Y;
+            d = forcDistribution(x, y, Z, smoothingWidth);
+            interior = ~isnan(d.rho);
+            expected = repmat(-0.5, nnz(interior), 1);
+            testCase.verifyEqual(d.rho(interior), expected, 'AbsTol', 1e-10);
         end
     end
 end
