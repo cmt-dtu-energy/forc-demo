@@ -207,6 +207,16 @@ frame is also saved as a static PDF, named after `OutputFile` (e.g.
 `twoHysteronsAnimation_finalFrame.pdf`) so multiple demos' animations
 don't overwrite each other's snapshot.
 
+Recording actually happens as Motion JPEG (an AVI) first, then gets
+transcoded to the requested MP4 via `ffmpeg` if it's found on the
+system path — see the comments at the top of
+`animateFORCIdealHysteron.m` for why: VideoWriter's own MPEG-4/H.264
+profile was found to silently write a corrupted file in at least one
+headless environment (confirmed with an independent decoder, not just
+MATLAB's own VideoReader). Without `ffmpeg` on the path, you get the
+`.avi` instead — still a correct video, just not the format most slide
+software expects.
+
 ## Grid alignment — a gotcha that applies to any sharp-featured demo
 
 The ideal hysteron's switching field `Hsw` must land exactly on both
@@ -248,7 +258,9 @@ reading too much into a FORC diagram's finest-scale structure.
 ## Requirements
 
 MATLAB only — no toolboxes beyond base graphics, `VideoWriter`, and
-`exportgraphics`.
+`exportgraphics`. `ffmpeg` on the system path is optional, used only to
+transcode the ideal-hysteron animations to MP4; without it you still
+get a correct video, just as `.avi` instead.
 
 ## Roadmap
 

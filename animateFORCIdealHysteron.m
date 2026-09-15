@@ -111,21 +111,26 @@ plotsDir = fullfile(fileparts(mfilename("fullpath")),"plots");
 if ~isfolder(plotsDir)
     mkdir(plotsDir)
 end
-videoPath = fullfile(plotsDir,options.OutputFile);
-gifPath = fullfile(plotsDir,options.OutputFile + ".gif");
-tempFramePath = string(tempname()) + ".png";
+[~,baseName] = fileparts(options.OutputFile);
+% Recorded as Motion JPEG in an AVI container, not straight to MP4: this
+% repo's usual MPEG-4/H.264 VideoWriter profile was found to silently
+% write a corrupted bitstream in this environment (confirmed with an
+% independent decoder, ffmpeg, not just MATLAB's own VideoReader --
+% verified frame-by-frame that the corruption is baked into the file,
+% not an artifact of how it's read back). Motion JPEG held up cleanly
+% across the same test. If `ffmpeg` is on the system path it's used
+% afterwards to transcode this into the requested MP4 (smaller, and the
+% format slide software actually expects); otherwise the AVI itself is
+% the delivered output, so this never silently ships a broken video.
+aviPath = fullfile(plotsDir,baseName + ".avi");
+gifPath = fullfile(plotsDir,baseName + ".gif");
 
-v = VideoWriter(videoPath,"MPEG-4");
+v = VideoWriter(aviPath,"Motion JPEG AVI");
 v.FrameRate = options.FrameRate;
+v.Quality = 90;
 open(v);
-closeVideo = onCleanup(@() close(v));
-cleanupTempFrame = onCleanup(@() deleteIfExists_(tempFramePath));
+closeVideo = onCleanup(@() closeIfOpen_(v));
 
-% "painters" (pure software vector rendering, no OpenGL) rather than
-% the default renderer: repeated exports from the default renderer
-% were seen to corrupt after a few dozen calls in this headless
-% environment (stray diagonal lines, garbled text, flattened colors) --
-% painters held up cleanly across a 20-call repeated-export test.
 f = figure("Renderer","painters");
 fontsize(f,FONTSIZE,"points")
 f.Position(3:4) = [1500 700];
@@ -200,7 +205,7 @@ for k = 1:nCurves
     for idx = descSel
         set(posMarker,"XData",descH(idx),"YData",descM(idx));
         addpoints(traceLine,descH(idx),descM(idx));
-        [v,gifFrameIndex,frameSize] = emitFrame_(v,f,tempFramePath,gifPath,gifFrameIndex,frameSize,options.AlsoWriteGif);
+        [v,gifFrameIndex,frameSize] = emitFrame_(v,f,gifPath,gifFrameIndex,frameSize,options.AlsoWriteGif);
     end
 
     ascCols = find(~isnan(M(row,:)));
@@ -210,14 +215,14 @@ for k = 1:nCurves
     for idx = ascSel
         set(posMarker,"XData",ascH(idx),"YData",ascM(idx));
         addpoints(traceLine,ascH(idx),ascM(idx));
-        [v,gifFrameIndex,frameSize] = emitFrame_(v,f,tempFramePath,gifPath,gifFrameIndex,frameSize,options.AlsoWriteGif);
+        [v,gifFrameIndex,frameSize] = emitFrame_(v,f,gifPath,gifFrameIndex,frameSize,options.AlsoWriteGif);
     end
 
     plot(axLeft,ascH,ascM,"Color",RECORDED_COLOR,"LineWidth",1.1,"HandleVisibility","off")
     clearpoints(traceLine)
 
     set(caption,"String",sprintf("curve %d of %d",k,nCurves))
-    [v,gifFrameIndex,frameSize] = emitFrame_(v,f,tempFramePath,gifPath,gifFrameIndex,frameSize,options.AlsoWriteGif);
+    [v,gifFrameIndex,frameSize] = emitFrame_(v,f,gifPath,gifFrameIndex,frameSize,options.AlsoWriteGif);
 end
 
 delete(caption)
@@ -239,14 +244,37 @@ title(axRight,sprintf("FORC distribution, SF = %d",options.SmoothingFactor), ...
     "FontSize",0.7*FONTSIZE)
 
 for i = 1:options.HoldFramesAtEnd
-    [v,gifFrameIndex,frameSize] = emitFrame_(v,f,tempFramePath,gifPath,gifFrameIndex,frameSize,options.AlsoWriteGif);
+    [v,gifFrameIndex,frameSize] = emitFrame_(v,f,gifPath,gifFrameIndex,frameSize,options.AlsoWriteGif);
 end
 
 hold(axLeft,"off")
 hold(axRight,"off")
 
-[~,videoBaseName] = fileparts(options.OutputFile);
-savePlot(f,videoBaseName + "_finalFrame.pdf")
+savePlot(f,baseName + "_finalFrame.pdf")
+
+% Close explicitly (rather than waiting for the onCleanup at function
+% exit) so the AVI is fully flushed to disk before ffmpeg tries to read
+% it below.
+close(v)
+
+mp4Path = fullfile(plotsDir,baseName + ".mp4");
+[ffmpegStatus,~] = system("ffmpeg -version");
+if ffmpegStatus == 0
+    transcodeCmd = sprintf('ffmpeg -y -loglevel error -i "%s" -c:v libx264 -pix_fmt yuv420p -movflags +faststart "%s"', ...
+        aviPath,mp4Path);
+    [transcodeStatus,transcodeMsg] = system(transcodeCmd);
+    if transcodeStatus == 0 && isfile(mp4Path)
+        delete(aviPath)
+        videoPath = mp4Path;
+    else
+        warning("animateFORCIdealHysteron:TranscodeFailed", ...
+            "ffmpeg transcode to MP4 failed; keeping the Motion JPEG AVI instead.\n%s",transcodeMsg);
+        videoPath = aviPath;
+    end
+else
+    videoPath = aviPath;
+    fprintf("ffmpeg not found on the system path; delivering Motion JPEG AVI instead of MP4.\n");
+end
 
 fprintf("Wrote %s\n",videoPath);
 if options.AlsoWriteGif
@@ -262,31 +290,26 @@ idx = unique(round(linspace(1,n,min(maxFrames,n))));
 end
 
 
-function [v,frameIndex,frameSize] = emitFrame_(v,f,tempFramePath,gifPath,frameIndex,frameSize,writeGif)
+function [v,frameIndex,frameSize] = emitFrame_(v,f,gifPath,frameIndex,frameSize,writeGif)
 %EMITFRAME_ Capture the current figure into the video, and optionally the GIF.
 %
-%   Goes through EXPORTGRAPHICS to a temporary PNG, then reads it back,
-%   rather than GETFRAME or PRINT(...,'-RGBImage'): both of those read
-%   back a raster buffer from MATLAB's on-screen graphics pipeline,
-%   which was observed to be unreliable here -- corrupted, ghosted
-%   frames (stray diagonal lines, garbled text, colors flattened to
-%   grayscale) when the figure is invisible, as it always is under
-%   `matlab -batch` with no real display attached. exportgraphics is
-%   the code path savePlot.m already relies on for correct static PDF
-%   figures in this same environment, so routing the video through it
-%   too -- at the cost of a disk round-trip per frame -- sidesteps the
-%   broken raster pipeline entirely instead of working around it.
+%   Uses GETFRAME, which turned out not to be the problem: what actually
+%   corrupted this animation's frames (stray diagonal lines, garbled
+%   text) was recording with VideoWriter's default MPEG-4/H.264 profile
+%   in this environment -- confirmed with an independent decoder
+%   (ffmpeg), so it was a broken bitstream, not a display/capture
+%   artifact. Once the caller records to Motion JPEG (see the top of
+%   this file) instead, plain GETFRAME is fine and far cheaper than
+%   round-tripping every frame through EXPORTGRAPHICS and a temp file.
 %
-%   exportgraphics on a figure uses a content bounding box, not a fixed
-%   pixel size: adding the colorbar/legend partway through this
-%   animation grows that box even though f.Position never changes, and
-%   VideoWriter requires every frame to be exactly the same size as the
-%   first one it was given. FRAMESIZE is fixed from this function's
-%   first call and every later frame is resized to match, rather than
-%   fighting the layout engine to keep the raw export size constant.
+%   GETFRAME's pixel size can still drift if the figure's content
+%   bounding box changes (e.g. the colorbar/legend added partway
+%   through this animation), and VideoWriter requires every frame to
+%   match the first one it was given. FRAMESIZE is fixed from this
+%   function's first call and every later frame is resized to match.
 drawnow
-exportgraphics(f,tempFramePath,"Resolution",150)
-img = imread(tempFramePath);
+frame = getframe(f);
+img = frame.cdata;
 if isempty(frameSize)
     frameSize = [size(img,1) size(img,2)];
 elseif ~isequal([size(img,1) size(img,2)],frameSize)
@@ -305,9 +328,13 @@ frameIndex = frameIndex + 1;
 end
 
 
-function deleteIfExists_(path)
-%DELETEIFEXISTS_ Remove a file if it's there; used to clean up the temp frame.
-if isfile(path)
-    delete(path)
+function closeIfOpen_(v)
+%CLOSEIFOPEN_ Close a VideoWriter, tolerating one already closed explicitly.
+%   This is the onCleanup safety net for an error mid-animation; the
+%   normal path already closes v itself before attempting the ffmpeg
+%   transcode, so a second close() here is expected to no-op.
+try
+    close(v)
+catch
 end
 end
