@@ -121,7 +121,12 @@ open(v);
 closeVideo = onCleanup(@() close(v));
 cleanupTempFrame = onCleanup(@() deleteIfExists_(tempFramePath));
 
-f = figure;
+% "painters" (pure software vector rendering, no OpenGL) rather than
+% the default renderer: repeated exports from the default renderer
+% were seen to corrupt after a few dozen calls in this headless
+% environment (stray diagonal lines, garbled text, flattened colors) --
+% painters held up cleanly across a 20-call repeated-export test.
+f = figure("Renderer","painters");
 fontsize(f,FONTSIZE,"points")
 f.Position(3:4) = [1500 700];
 tl = tiledlayout(f,1,2,"TileSpacing","compact","Padding","compact");
