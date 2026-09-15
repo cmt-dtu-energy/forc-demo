@@ -36,13 +36,22 @@ plotsDir = fullfile(fileparts(mfilename("fullpath")),"plots");
 if ~isfolder(plotsDir)
     mkdir(plotsDir)
 end
-videoPath = fullfile(plotsDir,options.OutputFile);
-gifPath = fullfile(plotsDir,options.OutputFile + ".gif");
+[~,baseName] = fileparts(options.OutputFile);
+% Recorded as Motion JPEG in an AVI container, not straight to MP4:
+% VideoWriter's MPEG-4/H.264 profile was found to silently write a
+% corrupted bitstream in this environment (confirmed with an
+% independent decoder, ffmpeg -- see animateFORCIdealHysteron.m for
+% the full writeup). ffmpeg transcodes this to the requested MP4 below
+% if it's on the system path; otherwise the AVI itself is delivered,
+% so this never silently ships a broken video.
+aviPath = fullfile(plotsDir,baseName + ".avi");
+gifPath = fullfile(plotsDir,baseName + ".gif");
 
-v = VideoWriter(videoPath,"MPEG-4");
+v = VideoWriter(aviPath,"Motion JPEG AVI");
 v.FrameRate = options.FrameRate;
+v.Quality = 90;
 open(v);
-closeVideo = onCleanup(@() close(v));
+closeVideo = onCleanup(@() closeIfOpen_(v));
 
 f = figure;
 f.Position(3:4) = [1500 700];
@@ -112,15 +121,47 @@ for i = 1:options.HoldFramesAtEnd
     [v,frameIndex] = frame_(v,f,gifPath,frameIndex,options.AlsoWriteGif);
 end
 
-[~,base] = fileparts(options.OutputFile);
-savePlot(f,base + "_finalFrame.pdf");
+savePlot(f,baseName + "_finalFrame.pdf");
 close(f);
+
+% Close explicitly (rather than waiting for the onCleanup at function
+% exit) so the AVI is fully flushed to disk before ffmpeg tries to
+% read it below.
+close(v)
+
+mp4Path = fullfile(plotsDir,baseName + ".mp4");
+[ffmpegStatus,~] = system("ffmpeg -version");
+if ffmpegStatus == 0
+    transcodeCmd = sprintf('ffmpeg -y -loglevel error -i "%s" -c:v libx264 -pix_fmt yuv420p -movflags +faststart "%s"', ...
+        aviPath,mp4Path);
+    [transcodeStatus,transcodeMsg] = system(transcodeCmd);
+    if transcodeStatus == 0 && isfile(mp4Path)
+        delete(aviPath)
+        videoPath = mp4Path;
+    else
+        warning("animateFORCLangevin:TranscodeFailed", ...
+            "ffmpeg transcode to MP4 failed; keeping the Motion JPEG AVI instead.\n%s",transcodeMsg);
+        videoPath = aviPath;
+    end
+else
+    videoPath = aviPath;
+    fprintf("ffmpeg not found on the system path; delivering Motion JPEG AVI instead of MP4.\n");
+end
+
 fprintf("Wrote %s\n",videoPath);
 
 end
 
 function indices = subsample_(n,maxFrames)
 indices = unique(round(linspace(1,n,min(maxFrames,n))));
+end
+
+function closeIfOpen_(v)
+%CLOSEIFOPEN_ Close a VideoWriter, tolerating one already closed explicitly.
+try
+    close(v)
+catch
+end
 end
 
 function [video,frameIndex] = frame_(video,figureHandle,gifPath,frameIndex,writeGif)
