@@ -3,8 +3,8 @@
 A MATLAB demonstration of FORC (First Order Reversal Curve) analysis: a
 small, working simulation-and-plotting pipeline you can point at any
 single-particle magnetization solver, plus a growing set of worked
-examples. Originally extracted from a project modeling interacting
-Stoner-Wohlfarth particle packings (`meteor-dipoles`); this repo keeps
+examples. Originally extracted from a separate project modeling
+interacting Stoner-Wohlfarth particle packings; this repo keeps
 the FORC machinery and swaps the real physics for illustrative
 placeholders you can follow end to end.
 
@@ -337,14 +337,13 @@ This is a series of demos, each swapping in a richer `SolveFcn`:
    implemented: a population of several coupled hysterons, and/or
    tracking real 3D positions so `CouplingField`'s sign and magnitude
    follow from actual dipole geometry instead of being chosen by hand.
-   This is the physics this repo was originally extracted from
-   (`meteor-dipoles`).
+   This is the physics this repo was originally extracted from.
 
 ## Provenance
 
 The simulation engine and plotting suite were extracted from a
-separate project (`meteor-dipoles`) that modeled interacting
-Stoner-Wohlfarth particle packings. That project's actual physics
+separate project that modeled interacting Stoner-Wohlfarth particle
+packings. That project's actual physics
 solver was stripped out; everything here works purely off the `H`/`M`
 arrays a `SolveFcn` produces, which is what makes it safe to plug new
 solvers in without touching the rest of the pipeline.
